@@ -17,6 +17,8 @@ go.sum
 resume/
 *.pdf
 *.txt
+internal/models/prompts.go
+internal/pdf/fonts/
 
 # Environment
 .env

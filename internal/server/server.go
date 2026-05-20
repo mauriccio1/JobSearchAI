@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"jobsearch/internal/config"
 	"jobsearch/internal/models"
+	"jobsearch/internal/pdf"
 	"log"
 	"net/http"
 	"os"
@@ -15,7 +17,7 @@ type RewriteRequest struct {
     JD string `json:"jd"`
 }
 
-func Start(sigChan <- chan os.Signal) error {
+func Start(sigChan <- chan os.Signal, cfg *config.Config) error {
 	resume, err := os.ReadFile("./resume/base_resume.txt")
 		if err != nil {
 		return fmt.Errorf("failed to read resume text file: %w", err)
@@ -49,21 +51,37 @@ func Start(sigChan <- chan os.Signal) error {
 			return
 		}
 
-		newResume, err := models.RewriteResume(string(resume), newJD, nil)	
+		txtResume, err := models.RewriteResume(string(resume), newJD, nil)	
 		if err != nil {
 		log.Printf("RewriteResume failed: %v", err)
         http.Error(w, "failed to rewrite resume", http.StatusInternalServerError)
         return
-    	}		
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"resume": newResume})
+    	}
 
+		newResume, err := models.StructureResume(txtResume, cfg)
+		if err != nil {
+			log.Printf("StructureResume failed: %v", err)
+        	http.Error(w, "failed to structure resume", http.StatusInternalServerError)
+        	return
+    	}
+
+		pdfBytes, err := pdf.Generate(newResume)	
+		if err != nil {
+			log.Printf("GeneratePDF failed: %v", err)
+    		http.Error(w, "failed to generate pdf", http.StatusInternalServerError)
+    		return
+		}
+
+
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "attachment; filename=resume.pdf")
+		w.Write(pdfBytes)
 	}))
 	
 	
 
 	server := http.Server{
-		Addr: ":8080",
+		Addr: ":" + cfg.Port,
 	}
 	
 
