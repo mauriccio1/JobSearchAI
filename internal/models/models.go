@@ -188,9 +188,66 @@ func ExtractMetaData(text string) (*MetaResult, error) {
 }
 
 
-
-
-
+func DryRun() *parser.Resume {
+    return &parser.Resume{
+        Name:    "John Doe",
+        Contact: "Miami, FL | 555-123-4567 | johndoe@gmail.com | linkedin.com/in/johndoe",
+        Summary: "Platform engineer with 4 years of experience building Go services and cloud infrastructure on AWS and GCP. Shipped internal developer tooling, CI/CD pipelines, and IaC with Terraform and Pulumi. CCNA certified with strong networking foundations.",
+        Certs:   "Cisco CCNA | CompTIA Security+ | CompTIA Network+",
+        Education: []string{
+            "B.S. Computer Science, Florida International University",
+            "College Certificate, Network Security, Miami Dade College",
+        },
+        Skills: []parser.Skill{
+            {Label: "Languages", Value: "Go, Python, Bash, PowerShell"},
+            {Label: "Cloud & Platform", Value: "AWS, GCP, Docker, Kubernetes"},
+            {Label: "IaC & CI/CD", Value: "Terraform, Pulumi, GitHub Actions"},
+            {Label: "Networking", Value: "BGP, VLANs, firewall design, VPN"},
+            {Label: "Observability", Value: "Prometheus, Grafana, Loki"},
+            {Label: "Identity & Security", Value: "Okta, Active Directory, RBAC"},
+        },
+        Experience: []parser.Job{
+            {
+                Title:   "Platform Engineer",
+                Company: "Acme Corp",
+                Dates:   "Jan 2023 – Present",
+                Intro:   "Platform engineer on a four-person infrastructure team supporting a 300-employee operation.",
+                Sections: []parser.JobSection{
+                    {
+                        Header: "Infrastructure & CI/CD",
+                        Bullets: []string{
+                            "Built and maintained CI/CD pipelines using GitHub Actions across 10+ services.",
+                            "Standardized Terraform IaC conventions adopted across all production services.",
+                            "Implemented Workload Identity Federation for keyless GCP authentication.",
+                        },
+                    },
+                    {
+                        Header: "Platform Services",
+                        Bullets: []string{
+                            "Shipped internal Go HTTP service on Cloud Run as abstraction layer over Jira REST API.",
+                            "Built employee lifecycle automation reducing onboarding from 30 minutes to under 1 minute.",
+                        },
+                    },
+                },
+            },
+            {
+                Title:   "DevOps Engineer",
+                Company: "Beta Systems",
+                Dates:   "Jun 2021 – Dec 2022",
+                Intro:   "DevOps engineer supporting cloud migration and infrastructure automation.",
+                Sections: []parser.JobSection{
+                    {
+                        Header: "Cloud Migration",
+                        Bullets: []string{
+                            "Migrated 15 legacy services from on-premise to AWS EC2 and ECS.",
+                            "Reduced infrastructure costs by 30% through right-sizing and reserved instances.",
+                        },
+                    },
+                },
+            },
+        },
+    }
+}
 
 func generate(reqBody *OllamaRequest) (string, error) {
 	url := "http://localhost:11434/api/generate"

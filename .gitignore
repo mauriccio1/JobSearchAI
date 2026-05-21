@@ -11,12 +11,10 @@ dist/
 *.test
 *.out
 vendor/
-go.sum
 
 # Personal data
 resume/
 *.pdf
-*.txt
 internal/models/prompts.go
 internal/pdf/fonts/
 
@@ -37,3 +35,4 @@ internal/pdf/fonts/
 
 # OS
 Thumbs.db
+extension/node_modules/

@@ -1,0 +1,398 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --c:      #00d4ff;
+  --c2:     #ff2d78;
+  --bg:     #0d111e;
+  --bg2:    #141928;
+  --bg3:    #1a2035;
+  --border: #2a3555;
+  --muted:  #6a85b8;
+  --text:   #a8c0e8;
+}
+
+body {
+  width: 100%;
+  background: var(--bg);
+  color: var(--c);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 14px;
+}
+
+/* ── Banner ── */
+.banner {
+  background: var(--bg2);
+  border-bottom: 2px solid var(--c);
+  padding: 16px 18px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.icon {
+  font-size: 28px;
+  filter: drop-shadow(0 0 6px var(--c));
+  flex-shrink: 0;
+}
+
+.banner-logo {
+  font-family: 'Orbitron', monospace;
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--c);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px var(--c);
+}
+
+.banner-sub {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-top: 4px;
+}
+
+/* ── Tab bar ── */
+.win-bar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+}
+
+.win-tab {
+  padding: 10px 18px;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.win-tab.active {
+  background: var(--bg3);
+  color: var(--c);
+  border-bottom: 2px solid var(--c);
+  margin-bottom: -1px;
+}
+
+/* ── Body ── */
+.body {
+  padding: 20px 18px;
+  background: var(--bg);
+}
+
+.scanline-header {
+  font-family: 'Orbitron', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+}
+
+/* ── Status row ── */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+  flex-shrink: 0;
+}
+
+.dot.red {
+  background: var(--c2);
+  box-shadow: 0 0 8px var(--c2);
+}
+
+.status-text {
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 1px;
+}
+
+.status-text span {
+  color: var(--c);
+}
+
+.error-text {
+  color: var(--c2);
+}
+
+/* ── Info grid ── */
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.info-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--c);
+  padding: 12px;
+}
+
+.info-box .label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+
+.info-box .val {
+  font-size: 13px;
+  color: var(--text);
+}
+
+/* ── Buttons ── */
+.btn-main {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--c);
+  color: var(--c);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 2px;
+  padding: 14px;
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.1);
+}
+
+.btn-main::before {
+  content: '> ';
+  color: var(--c);
+}
+
+.btn-error {
+  border-color: var(--c2);
+  color: var(--c2);
+  box-shadow: 0 0 12px rgba(255, 45, 120, 0.1);
+  margin-top: 12px;
+}
+
+.btn-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.btn-sec {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 12px 6px;
+  cursor: pointer;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.btn-sec.accent {
+  border-color: var(--c);
+  color: var(--c);
+  background: var(--bg3);
+}
+
+.btn-sec.accent2 {
+  border-color: var(--c2);
+  color: var(--c2);
+  background: var(--bg3);
+}
+
+/* ── Filename input ── */
+.filename-wrap {
+  margin-bottom: 4px;
+}
+
+.filename-wrap .label {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+}
+
+.filename-input {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--c);
+  color: var(--text);
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 12px;
+  padding: 10px 12px;
+  outline: none;
+  letter-spacing: 1px;
+}
+
+.filename-input:focus {
+  border-color: var(--c);
+  color: var(--c);
+}
+
+/* ── Progress bars ── */
+.section-label {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-bottom: 14px;
+}
+
+.progress-wrap {
+  margin-bottom: 14px;
+}
+
+.progress-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text);
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.progress-track {
+  height: 5px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--c);
+  box-shadow: 0 0 8px var(--c);
+  transition: width 0.4s ease;
+}
+
+/* ── Log box ── */
+.log-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  padding: 12px;
+  font-size: 11px;
+  color: var(--text);
+  height: 80px;
+  overflow: hidden;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.log-box p::before {
+  content: '[OK] ';
+  color: var(--muted);
+}
+
+/* ── Divider ── */
+.divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--c), transparent);
+  margin: 16px 0;
+  opacity: 0.3;
+}
+
+/* ── Footer ── */
+.footer {
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  padding: 10px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.footer-txt {
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.footer-link {
+  color: var(--c);
+}
+
+/* ── States ── */
+#state-loading,
+#state-ready,
+#state-error {
+  display: none;
+}
+
+/* ── Blink ── */
+.blink {
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+
+#btn-back {
+  width: 100%;
+  margin-top: 8px;
+  padding: 6px;
+  background: transparent;
+  border: 1px solid #1a3a4a;
+  color: #4a7a8a;
+  font-family: 'Share Tech Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+#btn-back:hover {
+  color: #00d4ff;
+  border-color: #00d4ff;
+}
+
+.music-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  margin-bottom: 10px;
+  border: 1px solid #0a2a3a;
+  background: #020f14;
+}
+
+.music-label {
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  color: #00d4ff;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+#btn-mute {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}

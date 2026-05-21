@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>JobSearchAI</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="banner">
+    <span class="icon">⟁</span>
+    <div>
+      <div class="banner-logo">JobSearchAI</div>
+      <div class="banner-sub">RESUME ENGINE v1.0 // LOCAL INFERENCE</div>
+    </div>
+  </div>
+  <div class="win-bar">
+    <div class="win-tab active">GENERATE</div>
+    <div class="win-tab">OPTIONS</div>
+    <div class="win-tab">ABOUT</div>
+  </div>
+  <div class="body">
+    <div class="scanline-header">// RESUME GENERATION MODULE</div>
+    <div class="status-row">
+      <div class="dot" id="server-dot"></div>
+      <div class="status-text">SERVER: <span id="server-status">CHECKING...</span></div>
+    </div>
+    <div id="state-idle">
+      <div class="info-grid">
+        <div class="info-box">
+          <div class="label">TRIMMER</div>
+          <div class="val">llama3.2:3b</div>
+        </div>
+        <div class="info-box">
+          <div class="label">REWRITER</div>
+          <div class="val">gemma2:9b</div>
+        </div>
+      </div>
+      <button class="btn-main" id="btn-generate">GENERATE RESUME</button>
+    </div>
+    <div id="state-loading">
+      <div class="section-label">PIPELINE PROGRESS</div>
+        <div class="music-bar">
+            <span id="music-label" class="music-label">♫ GENERATING...</span>
+            <button id="btn-mute">🔊</button>
+        </div>
+        <audio id="bg-music" src="../audio/track.mp3" loop></audio>
+
+      <div class="progress-wrap">
+        <div class="progress-label"><span>TRIMMING JD</span><span id="pct-trim">0%</span></div>
+        <div class="progress-track"><div class="progress-fill" id="bar-trim" style="width:0%"></div></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>REWRITING RESUME</span><span id="pct-rewrite">0%</span></div>
+        <div class="progress-track"><div class="progress-fill" id="bar-rewrite" style="width:0%"></div></div>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-label"><span>GENERATING PDF</span><span id="pct-pdf">0%</span></div>
+        <div class="progress-track"><div class="progress-fill" id="bar-pdf" style="width:0%"></div></div>
+      </div>
+      <div class="log-box" id="log-box">
+        <p id="log-line-1"></p>
+        <p id="log-line-2"></p>
+        <p id="log-line-3"></p>
+        <p id="log-line-4"></p>
+      </div>
+    </div>
+    <div id="state-ready">
+      <div class="status-row">
+        <div class="dot"></div>
+        <div class="status-text"><span>RESUME READY</span></div>
+      </div>
+      <div class="filename-wrap">
+        <div class="label">FILENAME</div>
+        <input
+          type="text"
+          id="filename-input"
+          class="filename-input"
+          value="resume.pdf"
+          spellcheck="false"
+        />
+      </div>
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn-sec accent" id="btn-preview">PREVIEW</button>
+        <button class="btn-sec accent" id="btn-download">DOWNLOAD</button>
+        <button class="btn-sec accent2" id="btn-upload">UPLOAD TO PAGE</button>
+        <button id="btn-back">← BACK</button>
+      </div>
+    </div>
+    <div id="state-error">
+      <div class="status-row">
+        <div class="dot red"></div>
+        <div class="status-text error-text" id="error-msg">SERVER UNREACHABLE</div>
+      </div>
+      <button class="btn-main btn-error" id="btn-retry">> RETRY CONNECTION</button>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-txt">github.com/<span class="footer-link">mauriccio1</span>/JobSearchAI</span>
+    <span class="footer-txt blink">■</span>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

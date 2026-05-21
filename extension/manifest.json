@@ -1,0 +1,24 @@
+{
+    "manifest_version": 3,
+    "name": "JobSearchAI",
+    "version": "1.0",
+    "description": "Generate a tailored resume for the current job listing",
+    "host_permissions": ["http://localhost:8080/*"],
+    "action": {
+        "default_title": "JobSearchAI"
+    },
+    "side_panel": {
+        "default_path": "popup.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "permissions": ["activeTab", "scripting", "sidePanel"],
+    "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

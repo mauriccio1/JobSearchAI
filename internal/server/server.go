@@ -23,6 +23,29 @@ func Start(sigChan <- chan os.Signal, cfg *config.Config) error {
 		return fmt.Errorf("failed to read resume text file: %w", err)
 		}
 
+	http.Handle("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+ 		w.WriteHeader(http.StatusOK)
+	}))
+
+
+	http.Handle("/api/resume/dry-run", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		pdfBytes, err := pdf.Generate(models.DryRun())
+		if err != nil {
+			log.Printf("GeneratePDF failed: %v", err)
+    		http.Error(w, "failed to generate pdf", http.StatusInternalServerError)
+    		return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/pdf")
+		w.Header().Set("Content-Disposition", "attachment; filename=resume.pdf")
+		w.Write(pdfBytes)
+
+
+	}))
+
+
+
 	http.Handle("/api/resume/rewrite", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "invalid method", http.StatusBadRequest)
@@ -72,7 +95,7 @@ func Start(sigChan <- chan os.Signal, cfg *config.Config) error {
     		return
 		}
 
-
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Content-Type", "application/pdf")
 		w.Header().Set("Content-Disposition", "attachment; filename=resume.pdf")
 		w.Write(pdfBytes)
