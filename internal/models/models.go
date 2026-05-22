@@ -8,259 +8,235 @@ import (
 	"jobsearch/internal/config"
 	"jobsearch/internal/parser"
 	"net/http"
+	"strings"
 )
 
+const (
+	ollamaUrl = "http://localhost:11434"
+)
 
 type OllamaRequest struct {
-    Model   string  `json:"model"`
-    Prompt  string  `json:"prompt"`
-    System  string  `json:"system"`
-    Stream  bool    `json:"stream"`
+	Model   string          `json:"model"`
+	Prompt  string          `json:"prompt"`
+	System  string          `json:"system"`
+	Stream  bool            `json:"stream"`
 	Format  json.RawMessage `json:"format,omitempty"`
-    Options Options `json:"options"`
+	Options Options         `json:"options"`
 }
+
 type Options struct {
-	Temperature float32 `json:"temperature"` 
+	Temperature float32 `json:"temperature"`
 }
 
 type OllamaResponse struct {
-    Response string `json:"response"`
-    Done     bool   `json:"done"`
+	Response string `json:"response"`
+	Done     bool   `json:"done"`
 }
 
 type ExperienceResult struct {
-    Experience []parser.Job `json:"experience"`
-	err 		error
+	Experience []parser.Job `json:"experience"`
+	err        error
 }
 
-type MetaResult struct {
-    Name      string   `json:"name"`
-    Contact   string   `json:"contact"`
-    Summary   string   `json:"summary"`
-    Skills    []parser.Skill  `json:"skills"`
-    Certs     string   `json:"certs"`
-    Education []string `json:"education"`
-	err       error
+type SummaryResult struct {
+	Summary string `json:"summary"`
+	err     error
+}
+
+func CheckOllama() error {
+	resp, err := http.Get(ollamaUrl + "/api/version")
+	if err != nil {
+		return fmt.Errorf("health check failed to run: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("ollama server is not available - please make sure ollama is running")
+	}
+	return nil
+}
+
+func GenerateEnv(resume string) (string, error) {
+	req := &OllamaRequest{
+		Model:   "llama3.2:3b",
+		Prompt:  fmt.Sprintf(setupPrompt, resume),
+		System:  setupSysPrompt,
+		Stream:  false,
+		Options: Options{Temperature: 0.1},
+	}
+	response, err := generate(req)
+	if err != nil {
+		return "", err
+	}
+	return response, nil
 }
 
 func TrimJD(fullJD string, req *OllamaRequest) (string, error) {
 	if req == nil {
 		req = &OllamaRequest{
-			Model: "llama3.2:3b",
-			Prompt: jdPrompt + fullJD,
-			System: jdSystemPrompt,
-			Stream: false,
-			Options: Options{
-				Temperature: 0.1,
-			},
-		}
-	}
-
-	response, err := generate(req)
-	if err != nil {
-		return "", err
-	}
-
-	return response, nil
-}
-
-func RewriteResume(resume, trimmedJD string, req *OllamaRequest) (string, error) {
-	if req == nil {
-		req = &OllamaRequest{
-			Model: "gemma2:9b",
-			Prompt: resumeRewritePrompt + resume + "\n---JOB DESCRIPTION---\n" + trimmedJD,
-			System: resumeRewriteSysPrompt,
-			Stream: false,
-			Options: Options{
-				Temperature: 0.2,
-			},
+			Model:   "llama3.2:3b",
+			Prompt:  jdPrompt + fullJD,
+			System:  jdSystemPrompt,
+			Stream:  false,
+			Options: Options{Temperature: 0.1},
 		}
 	}
 	response, err := generate(req)
 	if err != nil {
 		return "", err
 	}
-
 	return response, nil
-
 }
 
-func StructureResume(text string, cfg *config.Config) (*parser.Resume, error) {
+// RewriteAndStructure replaces the old RewriteResume + StructureResume flow.
+// It runs summary and experience rewrites concurrently, then structures the result.
+func RewriteAndStructure(resume, trimmedJD string, cfg *config.Config) (*parser.Resume, error) {
+	summCh := make(chan *SummaryResult, 1)
 	expCh := make(chan *ExperienceResult, 1)
-    metaCh := make(chan *MetaResult, 1)
 
-	newResume := &parser.Resume{}
-
-	
+	// rewrite summary (one call)
 	go func() {
-		exp, err := ExtractExp(text)
+		summary, err := rewriteSummary(resume, trimmedJD)
 		if err != nil {
-			expCh <-&ExperienceResult{err: err}
-			return 
+			summCh <- &SummaryResult{err: err}
+			return
 		}
-		expCh <-exp
-
+		summCh <- &SummaryResult{Summary: summary}
 	}()
 
+	// rewrite experience then structure it (two sequential calls)
 	go func() {
-		meta, err := ExtractMetaData(text)
+		rewritten, err := rewriteExperience(resume, trimmedJD)
 		if err != nil {
-			metaCh <-&MetaResult{err: err}
-			return 
+			expCh <- &ExperienceResult{err: err}
+			return
 		}
-		
-		metaCh <-meta
+		exp, err := extractExp(rewritten)
+		if err != nil {
+			expCh <- &ExperienceResult{err: err}
+			return
+		}
+		expCh <- exp
 	}()
-	
+
+	summary := <-summCh
 	exp := <-expCh
-	meta := <-metaCh
 
+	if summary.err != nil {
+		return nil, fmt.Errorf("RewriteSummary failed: %w", summary.err)
+	}
 	if exp.err != nil {
-    	return nil, fmt.Errorf("ExtractExp failed: %w", exp.err)
-    }
-    if meta.err != nil {
-    	return nil, fmt.Errorf("ExtractMetaData failed: %w", meta.err)
-    }
-
-
-	
-
-	newResume.Experience = exp.Experience
-	newResume.Name = cfg.Name
-	newResume.Contact = cfg.Contact
-	newResume.Summary = meta.Summary
-	newResume.Skills =  meta.Skills
-	newResume.Certs =  cfg.Certs
-	newResume.Education = cfg.Education
-
-	return newResume, nil
-
-} 
-
-func ExtractExp(text string) (*ExperienceResult, error) {
-	req := &OllamaRequest{
-		Model: "gemma2:9b",
-		Prompt: text,
-		System: extractExperienceSysPrompt,
-		Stream: false,
-		Format: json.RawMessage(experienceSchema),
-		Options: Options{
-			Temperature: 0.1,
-		},
+		return nil, fmt.Errorf("RewriteExperience failed: %w", exp.err)
 	}
 
+	return &parser.Resume{
+		Name:       cfg.Name,
+		Contact:    cfg.Contact,
+		Summary:    summary.Summary,
+		Experience: exp.Experience,
+		Skills:     cfg.Skills,
+		Certs:      cfg.Certs,
+		Education:  cfg.Education,
+	}, nil
+}
+
+func rewriteSummary(resume, trimmedJD string) (string, error) {
+	req := &OllamaRequest{
+		Model:   "gemma2:9b",
+		Prompt:  fmt.Sprintf(rewriteSummaryPrompt, resume, trimmedJD),
+		System:  rewriteSummarySysPrompt,
+		Stream:  false,
+		Options: Options{Temperature: 0.2},
+	}
+	response, err := generate(req)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(response), nil
+}
+
+func rewriteExperience(resume, trimmedJD string) (string, error) {
+	req := &OllamaRequest{
+		Model:   "gemma2:9b",
+		Prompt:  fmt.Sprintf(rewriteExperiencePrompt, resume, trimmedJD),
+		System:  rewriteExperienceSysPrompt,
+		Stream:  false,
+		Options: Options{Temperature: 0.2},
+	}
+	response, err := generate(req)
+	if err != nil {
+		return "", err
+	}
+	return response, nil
+}
+
+func extractExp(text string) (*ExperienceResult, error) {
+	req := &OllamaRequest{
+		Model:   "gemma2:9b",
+		Prompt:  text,
+		System:  extractExperienceSysPrompt,
+		Stream:  false,
+		Format:  json.RawMessage(experienceSchema),
+		Options: Options{Temperature: 0.1},
+	}
 	response, err := generate(req)
 	if err != nil {
 		return nil, err
 	}
-
 	exp := &ExperienceResult{}
 	if err := json.Unmarshal([]byte(response), exp); err != nil {
-		return nil, fmt.Errorf("ExperienceResult failed to unmarshal response: %w", err)
+		return nil, fmt.Errorf("extractExp failed to unmarshal: %w", err)
 	}
 	return exp, nil
-
 }
-
-func ExtractMetaData(text string) (*MetaResult, error) {
-	req := &OllamaRequest{
-		Model: "gemma2:9b",
-		Prompt: text,
-		System: extractMetaSysPrompt,
-		Stream: false,
-		Format: json.RawMessage(metaSchema),
-		Options: Options{
-			Temperature: 0.1,
-		},
-	}
-
-	response, err := generate(req)
-	if err != nil {
-		return nil, err
-	}
-
-	meta := &MetaResult{}
-	if err := json.Unmarshal([]byte(response), meta); err != nil {
-		return nil, fmt.Errorf("ExtractMetaData failed to unmarshal response: %w", err)
-	}
-	return meta, nil
-
-}
-
 
 func DryRun() *parser.Resume {
-    return &parser.Resume{
-        Name:    "John Doe",
-        Contact: "Miami, FL | 555-123-4567 | johndoe@gmail.com | linkedin.com/in/johndoe",
-        Summary: "Platform engineer with 4 years of experience building Go services and cloud infrastructure on AWS and GCP. Shipped internal developer tooling, CI/CD pipelines, and IaC with Terraform and Pulumi. CCNA certified with strong networking foundations.",
-        Certs:   "Cisco CCNA | CompTIA Security+ | CompTIA Network+",
-        Education: []string{
-            "B.S. Computer Science, Florida International University",
-            "College Certificate, Network Security, Miami Dade College",
-        },
-        Skills: []parser.Skill{
-            {Label: "Languages", Value: "Go, Python, Bash, PowerShell"},
-            {Label: "Cloud & Platform", Value: "AWS, GCP, Docker, Kubernetes"},
-            {Label: "IaC & CI/CD", Value: "Terraform, Pulumi, GitHub Actions"},
-            {Label: "Networking", Value: "BGP, VLANs, firewall design, VPN"},
-            {Label: "Observability", Value: "Prometheus, Grafana, Loki"},
-            {Label: "Identity & Security", Value: "Okta, Active Directory, RBAC"},
-        },
-        Experience: []parser.Job{
-            {
-                Title:   "Platform Engineer",
-                Company: "Acme Corp",
-                Dates:   "Jan 2023 – Present",
-                Intro:   "Platform engineer on a four-person infrastructure team supporting a 300-employee operation.",
-                Sections: []parser.JobSection{
-                    {
-                        Header: "Infrastructure & CI/CD",
-                        Bullets: []string{
-                            "Built and maintained CI/CD pipelines using GitHub Actions across 10+ services.",
-                            "Standardized Terraform IaC conventions adopted across all production services.",
-                            "Implemented Workload Identity Federation for keyless GCP authentication.",
-                        },
-                    },
-                    {
-                        Header: "Platform Services",
-                        Bullets: []string{
-                            "Shipped internal Go HTTP service on Cloud Run as abstraction layer over Jira REST API.",
-                            "Built employee lifecycle automation reducing onboarding from 30 minutes to under 1 minute.",
-                        },
-                    },
-                },
-            },
-            {
-                Title:   "DevOps Engineer",
-                Company: "Beta Systems",
-                Dates:   "Jun 2021 – Dec 2022",
-                Intro:   "DevOps engineer supporting cloud migration and infrastructure automation.",
-                Sections: []parser.JobSection{
-                    {
-                        Header: "Cloud Migration",
-                        Bullets: []string{
-                            "Migrated 15 legacy services from on-premise to AWS EC2 and ECS.",
-                            "Reduced infrastructure costs by 30% through right-sizing and reserved instances.",
-                        },
-                    },
-                },
-            },
-        },
-    }
+	return &parser.Resume{
+		Name:    "John Doe",
+		Contact: "Miami, FL | 555-123-4567 | johndoe@gmail.com | linkedin.com/in/johndoe",
+		Summary: "Platform engineer with 4 years of experience building Go services and cloud infrastructure on AWS and GCP.",
+		Certs:   "Cisco CCNA | CompTIA Security+ | CompTIA Network+",
+		Education: []string{
+			"B.S. Computer Science, Florida International University",
+			"College Certificate, Network Security, Miami Dade College",
+		},
+		Skills: []parser.Skill{
+			{Label: "Languages", Value: "Go, Python, Bash, PowerShell"},
+			{Label: "Cloud & Platform", Value: "AWS, GCP, Docker, Kubernetes"},
+			{Label: "IaC & CI/CD", Value: "Terraform, Pulumi, GitHub Actions"},
+			{Label: "Networking", Value: "BGP, VLANs, firewall design, VPN"},
+			{Label: "Observability", Value: "Prometheus, Grafana, Loki"},
+			{Label: "Identity & Security", Value: "Okta, Active Directory, RBAC"},
+		},
+		Experience: []parser.Job{
+			{
+				Title:   "Platform Engineer",
+				Company: "Acme Corp",
+				Dates:   "Jan 2023 – Present",
+				Sections: []parser.JobSection{
+					{
+						Header: "Infrastructure & CI/CD",
+						Bullets: []string{
+							"Built and maintained CI/CD pipelines using GitHub Actions across 10+ services.",
+							"Standardized Terraform IaC conventions adopted across all production services.",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func generate(reqBody *OllamaRequest) (string, error) {
 	url := "http://localhost:11434/api/generate"
-
 	data, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", fmt.Errorf("generate failed to parse response: %w", err)
+		return "", fmt.Errorf("generate failed to marshal request: %w", err)
 	}
-	resp, err := http.Post(url, "application/json",bytes.NewBuffer(data))
+	resp, err := http.Post(url, "application/json", bytes.NewBuffer(data))
 	if err != nil {
 		return "", fmt.Errorf("generate failed: %w", err)
 	}
-	defer func() {_ = resp.Body.Close()}()
+	defer func() { _ = resp.Body.Close() }()
 	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", fmt.Errorf("generate failed to read response: %w", err)
@@ -275,11 +251,5 @@ func generate(reqBody *OllamaRequest) (string, error) {
 	if !response.Done {
 		return "", fmt.Errorf("generate failed: generation didn't finish")
 	}
-
 	return response.Response, nil
-}
-
-func GeneratePDF() {
-
-
 }

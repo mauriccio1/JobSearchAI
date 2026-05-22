@@ -1,7 +1,7 @@
 package models
 
 const (
-	experienceSchema = `{
+    experienceSchema = `{
   "type": "object",
   "properties": {
     "experience": {
@@ -27,25 +27,12 @@ const (
       }
     }
   }
-}
-`
+}`
 
-
-	metaSchema = `{
+    summarySchema = `{
   "type": "object",
   "properties": {
-    "summary": { "type": "string" },
-    "skills": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "label": { "type": "string" },
-          "value": { "type": "string" }
-        }
-      }
-    }
+    "summary": { "type": "string" }
   }
 }`
 )
-

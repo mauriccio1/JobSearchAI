@@ -74,18 +74,11 @@ func Start(sigChan <- chan os.Signal, cfg *config.Config) error {
 			return
 		}
 
-		txtResume, err := models.RewriteResume(string(resume), newJD, nil)	
+		newResume, err := models.RewriteAndStructure(string(resume), newJD, cfg)	
 		if err != nil {
 		log.Printf("RewriteResume failed: %v", err)
         http.Error(w, "failed to rewrite resume", http.StatusInternalServerError)
         return
-    	}
-
-		newResume, err := models.StructureResume(txtResume, cfg)
-		if err != nil {
-			log.Printf("StructureResume failed: %v", err)
-        	http.Error(w, "failed to structure resume", http.StatusInternalServerError)
-        	return
     	}
 
 		pdfBytes, err := pdf.Generate(newResume)	
