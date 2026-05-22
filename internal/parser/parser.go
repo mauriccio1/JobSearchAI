@@ -21,6 +21,7 @@ type Job struct {
 type JobSection struct {
     Header  string   `json:"header"`
     Bullets []string `json:"bullets"`
+	BulletOrder  []int  `json:"order"`
 }
 
 type Skill struct {

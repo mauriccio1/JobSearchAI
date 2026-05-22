@@ -43,6 +43,33 @@ type SummaryResult struct {
 	err     error
 }
 
+
+type rewriteEXPResults struct {
+	jobs []parser.Job
+	err  error
+}
+
+
+type rankedEXPResults struct {
+	ranking		  rankingMap
+	err       error 
+
+}
+
+type rankingMap map[companyName]rankOrder
+type companyName string
+type rankOrder map[string][]int
+
+type SectionRanking struct {
+    Company string `json:"company"`
+    Section string `json:"section"`
+    Order   []int  `json:"order"`
+}
+
+type expWrapper struct { Experience []parser.Job `json:"experience"` }
+type rankWrapper struct { Rankings []SectionRanking `json:"rankings"` }
+
+
 func CheckOllama() error {
 	resp, err := http.Get(ollamaUrl + "/api/version")
 	if err != nil {
@@ -53,6 +80,60 @@ func CheckOllama() error {
 		return fmt.Errorf("ollama server is not available - please make sure ollama is running")
 	}
 	return nil
+}
+
+func RankBullets(jobs []parser.Job, trimmedJD string) ([]SectionRanking, error){
+	jobsJSON, err := json.MarshalIndent(jobs, "", " ")
+	if err != nil {
+		return nil, err
+	}
+	req := &OllamaRequest{
+        Model:  "gemma2:9b",
+        Prompt: fmt.Sprintf(rankPrompt, string(jobsJSON), trimmedJD),
+        System: rankSysPrompt,
+        Format: json.RawMessage(rankSchema),
+		Options: Options{
+			Temperature: 0.2,
+		},
+    }
+
+	response, err := generate(req)
+	if err != nil {
+		return nil, err
+	}
+	var w rankWrapper
+	if err := json.Unmarshal([]byte(response), &w); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
+	}
+	return w.Rankings, nil
+	
+}
+
+func RewordBullets(jobs []parser.Job, trimmedJD string) ([]parser.Job, error) {
+	jobsJSON, err := json.MarshalIndent(jobs, "", " ")
+	if err != nil {
+		return nil, err
+	}
+	req := &OllamaRequest{
+        Model:  "gemma2:9b",
+        Prompt: fmt.Sprintf(rewordBulletPrompt, string(jobsJSON), trimmedJD),
+        System: rewordBulletSysPrompt,
+        Format: json.RawMessage(rewordBulletSchema),
+		Options: Options{
+			Temperature: 0.4,
+		},
+    }
+
+	response, err := generate(req)
+	if err != nil {
+		return nil, err
+	}
+	var w expWrapper
+	if err := json.Unmarshal([]byte(response), &w); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
+	}
+	return w.Experience, nil	
+
 }
 
 func GenerateEnv(resume string) (string, error) {
@@ -105,17 +186,13 @@ func RewriteAndStructure(resume, trimmedJD string, cfg *config.Config) (*parser.
 
 	// rewrite experience then structure it (two sequential calls)
 	go func() {
-		rewritten, err := rewriteExperience(resume, trimmedJD)
+		rewrittenJobs, err := rewriteExperience(resume, trimmedJD)
 		if err != nil {
 			expCh <- &ExperienceResult{err: err}
 			return
 		}
-		exp, err := extractExp(rewritten)
-		if err != nil {
-			expCh <- &ExperienceResult{err: err}
-			return
-		}
-		expCh <- exp
+
+		expCh <- &ExperienceResult{Experience: rewrittenJobs}
 	}()
 
 	summary := <-summCh
@@ -154,22 +231,103 @@ func rewriteSummary(resume, trimmedJD string) (string, error) {
 	return strings.TrimSpace(response), nil
 }
 
-func rewriteExperience(resume, trimmedJD string) (string, error) {
-	req := &OllamaRequest{
-		Model:   "gemma2:9b",
-		Prompt:  fmt.Sprintf(rewriteExperiencePrompt, resume, trimmedJD),
-		System:  rewriteExperienceSysPrompt,
-		Stream:  false,
-		Options: Options{Temperature: 0.2},
-	}
-	response, err := generate(req)
+
+func rewriteExperience(resume, trimmedJD string) ([]parser.Job, error) {
+	
+	rankChan := make(chan *rankedEXPResults, 1)
+	rewordChan := make(chan *rewriteEXPResults, 1)
+
+	exp, err := extractExp(resume)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return response, nil
+
+
+
+	go func() {
+		sectRanking, err := RankBullets(exp, trimmedJD)
+		if err != nil {
+			rankChan <- &rankedEXPResults{err: err}
+			return
+		}
+		rankings := make(rankingMap)
+		
+		for _, sr := range sectRanking {
+    		company := companyName(sr.Company)
+    		if rankings[company] == nil {
+        		rankings[company] = make(rankOrder)
+    		}
+    		rankings[company][sr.Section] = sr.Order
+		}
+
+		rankChan <- &rankedEXPResults{ranking: rankings}
+	}()
+
+
+	go func() {
+		rewordedExp, err := RewordBullets(exp, trimmedJD)
+		if err != nil {
+			rewordChan <- &rewriteEXPResults{err: err}
+			return
+		}
+		
+
+		rewordChan <-&rewriteEXPResults{jobs: rewordedExp}
+
+
+
+	}()
+
+	ranked := <-rankChan
+	reworded := <-rewordChan
+
+	if ranked.err != nil {
+		return nil, fmt.Errorf("RewriteExperience failed: %w", ranked.err)
+	}
+	if reworded.err != nil {
+		return nil, fmt.Errorf("RewriteExperience failed: %w", reworded.err)
+	}
+
+	var rewrittenExp []parser.Job
+	rewrittenExp = reworded.jobs
+
+	for ji, j := range rewrittenExp {
+		jobMap, ok  := ranked.ranking[companyName(j.Company)]
+		if !ok {
+		 continue
+		}
+		for si, s := range j.Sections {
+			original := s.Bullets         
+			newOrder, ok := jobMap[s.Header]
+			if !ok || len(newOrder) != len(original) {
+			 continue
+			} else if !validateOrderHelper(newOrder, len(original)){
+				continue
+			}
+			reordered := make([]string, len(original))
+			for i, idx := range newOrder {
+
+				reordered[i] = original[idx]
+			}
+			
+			rewrittenExp[ji].Sections[si].Bullets = reordered
+		}
+	}
+	return rewrittenExp, nil
 }
 
-func extractExp(text string) (*ExperienceResult, error) {
+func validateOrderHelper(order []int, length int) bool {
+	valid := true
+	for _, idx := range order {
+		if idx < 0 || idx >= length {
+			valid = false
+			break
+		}
+	}
+	return valid
+}
+
+func extractExp(text string) ([]parser.Job, error) {
 	req := &OllamaRequest{
 		Model:   "gemma2:9b",
 		Prompt:  text,
@@ -182,11 +340,11 @@ func extractExp(text string) (*ExperienceResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	exp := &ExperienceResult{}
-	if err := json.Unmarshal([]byte(response), exp); err != nil {
-		return nil, fmt.Errorf("extractExp failed to unmarshal: %w", err)
+	var w expWrapper
+	if err := json.Unmarshal([]byte(response), &w); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %w", err)
 	}
-	return exp, nil
+	return w.Experience, nil
 }
 
 func DryRun() *parser.Resume {
