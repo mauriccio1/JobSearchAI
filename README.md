@@ -1,6 +1,6 @@
 # JobSearchAI
 
-A local AI-powered resume optimization pipeline built in Go. Given a job description, it automatically trims the noise, rewrites your base resume to match the role using locally running LLMs, and returns a tailored result — all running on your own machine with no cloud API costs.
+A local AI-powered resume tailoring pipeline built in Go. Paste a job description, get back a tailored PDF — all running on your own machine with no cloud API costs.
 
 Built out of necessity after experiencing firsthand how broken the job application process is.
 
@@ -8,40 +8,53 @@ Built out of necessity after experiencing firsthand how broken the job applicati
 
 ## How It Works
 
-The pipeline runs two LLM inference steps sequentially against a local [Ollama](https://ollama.com) server:
+```
+Job Description (raw page text)
+           │
+           ▼
+    [Llama 3.2 3B]              ← strips noise, extracts requirements only
+           │
+           ▼
+      Trimmed JD
+           │
+           ▼
+    [Gemma 2 9B]                ← extracts structured experience from base resume
+           │
+           ├─────────────────────────────────┐
+           ▼                                 ▼
+    RankBullets (Gemma 2 9B)      RewordBullets + RewriteSummary (Gemma 2 9B)
+    returns ranked indices         returns reworded bullets and tailored summary
+           │                                 │
+           └──────────────┬──────────────────┘
+                          ▼
+               Go Assembly Layer              ← deterministic, no LLM involved
+               reorders bullets by rank,
+               merges reworded text
+                          │
+                          ▼
+                    PDF Generation
+```
 
-```
-Job Description (raw)
-        │
-        ▼
-  [Llama 3.2 3B]          ← strips noise, extracts requirements only
-        │
-        ▼
-  Trimmed JD
-        │
-        ▼
-  [Gemma 2 9B]            ← rewrites base resume to match JD keywords
-        │
-        ▼
-  Tailored Resume (JSON)
-```
+**Why decomposed?**
+A single LLM call asked to simultaneously rank, reword, preserve, and format all experience bullets under one prompt was too much — the model dropped bullets, ignored ordering, and played it safe. Breaking it into focused single-task calls with deterministic Go assembly in between produces significantly more consistent output.
 
 **Why two models?**
-- Llama 3.2 3B is fast and cheap for extraction tasks — no creativity needed, just signal from noise
-- Gemma 2 9B has strong instruction-following for the rewrite — it reorganizes and reframes without fabricating experience
+- Llama 3.2 3B is fast for extraction — strip noise from a raw JD with no creativity needed
+- Gemma 2 9B handles the judgment tasks — rewording, ranking, summary framing
 
-**Why local models?**
-At scale, cloud API costs for resume rewriting become significant. Running inference locally means zero per-request cost regardless of volume.
+**Why local?**
+Zero per-request cost. Your resume and job data never leave your machine.
 
 ---
 
 ## Stack
 
-- **Go** — HTTP server, pipeline orchestration, Ollama API client
+- **Go** — HTTP server, pipeline orchestration, Ollama API client, PDF generation
+- **Cobra** — CLI with `serve` and `setup` commands
 - **Ollama** — local LLM runtime
 - **Llama 3.2 3B** — job description trimmer
-- **Gemma 2 9B** — resume rewriter
-- **Chrome Extension** *(in progress)* — extracts JD from current browser tab, sends to local server, returns tailored resume for review and upload
+- **Gemma 2 9B** — experience extractor, bullet ranker, bullet rewriter, summary writer
+- **Chromium Extension** — extracts JD from current browser tab, sends to local server, returns tailored PDF for preview, download, or upload
 
 ---
 
@@ -49,14 +62,25 @@ At scale, cloud API costs for resume rewriting become significant. Running infer
 
 ```
 JobSearchAI/
-├── main.go                   # Entry point, signal handling
+├── main.go                        # one-liner entry point
 ├── go.mod
+├── command/
+│   ├── root.go                    # Cobra root command
+│   ├── serve.go                   # go run main.go serve
+│   └── setup.go                   # go run main.go setup
 ├── internal/
 │   ├── server/
-│   │   └── server.go         # HTTP server, route handlers, graceful shutdown
-│   └── models/
-│       └── models.go         # Ollama API client, TrimJD, RewriteResume
-└── resume/                   # gitignored — put your base_resume.txt here
+│   │   └── server.go              # HTTP server, route handlers, graceful shutdown
+│   ├── models/
+│   │   ├── models.go              # pipeline orchestration, Ollama client
+│   │   ├── prompts.go             # all LLM prompts
+│   │   └── schemas.go             # JSON schemas for structured outputs
+│   ├── config/
+│   │   └── config.go              # loads .env, dynamic SKILL_N / EDUCATION_N
+│   └── parser/
+│       └── parser.go              # Resume, Job, JobSection, Skill types
+├── extension/                     # Chromium extension (Chrome + Edge)
+└── resume/                        # gitignored — your personal resume files live here
     └── base_resume.txt
 ```
 
@@ -66,7 +90,7 @@ JobSearchAI/
 
 - [Go 1.21+](https://go.dev/dl/)
 - [Ollama](https://ollama.com) installed and running
-- Required models pulled:
+- Required models:
 
 ```bash
 ollama pull llama3.2:3b
@@ -79,28 +103,61 @@ ollama pull gemma2:9b
 
 **1. Clone the repo**
 ```bash
-git clone https://github.com/yourusername/JobSearchAI.git
+git clone https://github.com/mauriccio1/JobSearchAI.git
 cd JobSearchAI
 ```
 
 **2. Add your base resume**
 ```bash
 mkdir resume
-# paste your resume as plain text
-vim resume/base_resume.txt
+vim resume/base_resume.txt   # paste your resume as plain text
 ```
 
-**3. Start Ollama**
+**3. Run setup**
+
+The setup command reads your base resume, parses it with an LLM, and writes a `.env` file with your name, contact, skills, education, and certifications.
+
+```bash
+go run main.go setup
+```
+
+Review the generated `.env` before confirming. Setup takes ~30–40 seconds.
+
+**4. Start Ollama**
 ```bash
 ollama serve
 ```
 
-**4. Run the server**
+**5. Start the server**
 ```bash
-go run main.go
+go run main.go serve
 ```
 
-Server starts on `localhost:8080`.
+Server starts on the port defined in your `.env` (default `8080`).
+
+---
+
+## Extension
+
+**Install**
+
+1. Open Chrome or Edge and navigate to `chrome://extensions`
+2. Enable **Developer mode** (top right toggle)
+3. Click **Load unpacked** and select the `extension/` folder
+
+**Usage**
+
+1. Navigate to any job posting page in your browser
+2. Click the JobSearchAI extension icon
+3. Verify the server status shows **CONNECTION ESTABLISHED** — if not, make sure `go run main.go serve` is running
+4. Click **GENERATE RESUME**
+5. The extension reads the job description from the current page, sends it to your local server, and runs the full pipeline
+6. When complete, you can:
+   - **PREVIEW** — opens the tailored PDF in a new tab
+   - **DOWNLOAD** — saves the PDF with your chosen filename
+   - **UPLOAD TO PAGE** — attempts to inject the PDF into a file upload field on the current page (works on some ATS platforms, not all)
+
+**Note:** The extension cannot read certain page types (PDFs, browser internal pages, some authenticated portals). If the server is running but generation fails, try copying the job description manually and using the API directly.
 
 ---
 
@@ -108,49 +165,53 @@ Server starts on `localhost:8080`.
 
 ### `POST /api/resume/rewrite`
 
-Trims a job description and rewrites your base resume to match it.
+Trims a job description and runs the full tailoring pipeline against your base resume.
 
 **Request**
 ```json
-{
-  "jd": "paste the full job description text here"
-}
+{ "jd": "full job description text" }
 ```
 
 **Response**
-```json
-{
-  "resume": "rewritten resume text tailored to the job description"
-}
-```
 
-**Example**
+Returns a PDF binary (`application/pdf`).
+
 ```bash
 curl -X POST http://localhost:8080/api/resume/rewrite \
   -H "Content-Type: application/json" \
-  -d '{"jd": "your job description here"}'
+  -d '{"jd": "your job description here"}' \
+  --output resume.pdf
 ```
 
 ---
 
 ## Design Decisions
 
-**Prompt engineering over fine-tuning** — after testing 6+ models (Phi4-Mini, Mistral 7B, Qwen3 4B, Llama 3.2 3B, Qwen3 14B, Gemma 2 9B) with an iterative prompt refinement process, Gemma 2 9B with explicit anti-fabrication guardrails produced the most consistent, accurate rewrites. The key failure modes discovered were fabricated credentials, shuffled work history between employers, and repetition loops on long inputs — all addressed in the final prompt design.
+**Decomposed pipeline over monolithic rewrite** — splitting rewrite into three concurrent calls (RankBullets, RewordBullets, RewriteSummary) with Go assembly in between gives each model a single focused task. Bullet preservation is handled deterministically in code, not by the LLM. If any model output fails validation (wrong index count, out-of-bounds index, missing company), the pipeline falls back gracefully to the original order.
 
-**Two-step pipeline** — passing raw job descriptions directly to the rewriter caused context overflow on longer JDs. Pre-trimming with a fast 3B model keeps the rewriter's input well within the 8K context window regardless of JD length.
+**Anti-fabrication guardrails** — after testing 6+ models and iterating through multiple prompt architectures, the final prompts distinguish between framing (describing real work in JD language) and fabrication (inventing tools, metrics, or employers). The reword prompt uses concrete before/after examples to teach this distinction. The summary prompt enforces exact numbers from the resume rather than calculated percentages.
 
-**Graceful shutdown** — the server listens for SIGINT/SIGTERM and gives in-flight requests 5 seconds to complete before exiting.
+**Two-step JD trimming** — passing raw job description page text directly to the rewriter caused context overflow and noise. Pre-trimming with Llama 3.2 3B keeps the rewriter's input clean and within the context window regardless of JD length.
+
+**Structured JSON output** — all model calls use Ollama's `format` field with explicit JSON schemas. Wrapper structs (`expWrapper`, `rankWrapper`) normalize model output before it reaches the assembly layer.
 
 ---
 
 ## Roadmap
 
-- [ ] Chrome extension — extract JD from current tab, preview tailored resume, upload directly to job page
-- [ ] PDF generation — render rewritten resume as a clean, ATS-friendly PDF
-- [ ] Application tracker — SQLite-backed dashboard to track applications, statuses, and generated resumes
-- [ ] Job crawler — scrape job boards and filter by match score before rewriting
-- [ ] Email monitor — Gmail API integration to surface recruiter responses in the dashboard
-- [ ] Multi-user support — user profiles, resume management, application history
+### V1 — complete
+- [x] Decomposed LLM pipeline (trim → extract → rank + reword → assemble)
+- [x] PDF generation
+- [x] Cobra CLI (`serve`, `setup`)
+- [x] LLM-powered onboarding writes `.env` from base resume
+- [x] Chromium extension (Chrome + Edge) with preview, download, and upload
+- [x] Anti-hallucination prompt architecture
+
+### V2 — planned
+- [ ] Pluggable provider interface — `--provider=ollama|claude|openai`, `--model=<any>`
+- [ ] Cloud API provider (Claude/OpenAI) for higher quality output on demand
+- [ ] Cloud deployment — GCP + Kubernetes, GPU-backed inference nodes
+- [ ] Fine-tuning pipeline — generate high-quality resume pairs at scale, fine-tune a small model on curated data
 
 ---
 

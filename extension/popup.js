@@ -1,5 +1,19 @@
 checkServer()
 
+ const SPINNER_FRAMES = ['⠋','⠙','⠹','⠸','⠼','⠴','⠦','⠧','⠇','⠏']
+    const PIPELINE_STAGES = [
+    'TRIMMING JOB DESCRIPTION...',
+    'EXTRACTING EXPERIENCE...',
+    'RANKING BULLETS...',
+    'REWRITING BULLETS...',
+    'REWRITING SUMMARY...',
+    'ASSEMBLING RESUME...',
+    'GENERATING PDF...',
+    ]
+    let _spinnerInterval = null
+    let _stageInterval   = null
+
+
 let resume = null
 
 const audio = document.getElementById('bg-music')
@@ -96,6 +110,8 @@ function checkServer() {
 }
 
 function generate() {
+
+   
     const loadState = document.getElementById('state-loading')
     const idleState = document.getElementById('state-idle')
     const readyState = document.getElementById('state-ready')
@@ -106,6 +122,7 @@ function generate() {
     audio.play().catch(err => {
         log('music blocked: ' + err.message)
     })
+    startSpinner()
 
     log('scraping job description...')
     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -115,6 +132,7 @@ function generate() {
         }, (results) => {
             if (chrome.runtime.lastError || !results || !results[0]) {
                 audio.pause()
+                stopSpinner()
                 audio.currentTime = 0
                 log('ERROR: cannot read this page')
                 loadState.style.display = 'none'
@@ -135,6 +153,7 @@ function generate() {
             })
             .then(blob => {
                 audio.pause()
+                stopSpinner()
                 audio.currentTime = 0
                 log('pdf hot off the press 🔥')
                 resume = blob
@@ -143,6 +162,7 @@ function generate() {
             })
             .catch(err => {
                 audio.pause()
+                stopSpinner()
                 audio.currentTime = 0
                 log('ERROR: ' + err.message)
                 loadState.style.display = 'none'
@@ -151,4 +171,24 @@ function generate() {
             })
         })
     })
+}
+
+function startSpinner() {
+  const charEl   = document.getElementById('spinner-char')
+  const statusEl = document.getElementById('spinner-status')
+  let frame = 0
+  let stage = 0
+  _spinnerInterval = setInterval(() => {
+    charEl.textContent = SPINNER_FRAMES[frame++ % SPINNER_FRAMES.length]
+  }, 80)
+  _stageInterval = setInterval(() => {
+    statusEl.textContent = PIPELINE_STAGES[++stage % PIPELINE_STAGES.length]
+  }, 5000)
+}
+
+function stopSpinner() {
+  clearInterval(_spinnerInterval)
+  clearInterval(_stageInterval)
+  _spinnerInterval = null
+  _stageInterval   = null
 }
